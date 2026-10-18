@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "editor",
+  "description": "The Isothrum editor (bundled, or isothrum.com) may run labs and capture their traffic. No other site may; debug builds add a local build of the site (src/capabilities.rs).",
+  "windows": ["main"],
+  "remote": { "urls": ["https://www.isothrum.com/*"] },
+  "permissions": [
+    "core:event:default",
+    "allow-desktop-info",
+    "allow-environment-up",
+    "allow-environment-down",
+    "allow-environment-status",
+    "allow-environment-live",
+    "allow-capture-start",
+    "allow-capture-stop",
+    "allow-machine-console",
+    "allow-machine-display",
+    "allow-machine-action",
+    "allow-link-list",
+    "allow-link-action",
+    "allow-snapshot-list",
+    "allow-snapshot-take",
+    "allow-snapshot-use",
+    "allow-snapshot-delete",
+    "allow-update-check",
+    "allow-update-install"
+  ]
+}

@@ -1,0 +1,43 @@
+[package]
+name = "isothrum-desktop"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+
+# Its own workspace: GTK/WebKit are needed here only.
+[workspace]
+
+[lib]
+name = "isothrum_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Isoloom at the commit the libraries pin (isothrum's workspace Cargo.toml): the spec the editor's
+# compiler writes, the lab it lowers to and the files each target generates. Pinned to the rename
+# commit `2a49995a` so the desktop reads/generates specs with the same libraries as the runner and
+# the rest of the workspace (was the stale `690d585e`). The `[patch]` below points these at the
+# local Isoloom checkout, since that commit lives only on local `main`.
+isoloom-spec = { git = "https://github.com/isoloom/isoloom", rev = "2a49995a03c94f4732b40aa0f62f3314b5edc07b", version = "0.11.1" }
+isoloom-targets = { git = "https://github.com/isoloom/isoloom", rev = "2a49995a03c94f4732b40aa0f62f3314b5edc07b", version = "0.11.1" }
+tauri-plugin-updater = "2"
+
+[dev-dependencies]
+# The tests run what the editor's compiler writes. The compiler lives in the Isothrum repo; while
+# apps/desktop still lives there too this is a sibling path, flipped to a published/git dep at the
+# release-time cutover.
+isothrum-compiler = { path = "../../isothrum/crates/isothrum-compiler" }
+
+# Local dev links: the Isoloom crates the manifest pins by git (rev 2a49995a, local-only) are built
+# from the local checkout instead, like Isoloom's `cargo xtask dev-link`. The release-time cutover
+# replaces these with the published/pinned crates.
+[patch."https://github.com/isoloom/isoloom"]
+isoloom-spec = { path = "../../isoloom/crates/core/isoloom-spec" }
+isoloom-targets = { path = "../../isoloom/crates/targets/isoloom-targets" }
+isoloom-manifest = { path = "../../isoloom/crates/core/isoloom-manifest" }

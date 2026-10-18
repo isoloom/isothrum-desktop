@@ -1,0 +1,6 @@
+# Rust build output
+/src-tauri/target/
+# Node
+/node_modules/
+# The editor bundle copied in by `npm run editor` (from @isothrum/editor)
+/editor/

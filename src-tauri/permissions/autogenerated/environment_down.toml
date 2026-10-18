@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-environment-down"
+description = "Enables the environment_down command without any pre-configured scope."
+commands.allow = ["environment_down"]
+
+[[permission]]
+identifier = "deny-environment-down"
+description = "Denies the environment_down command without any pre-configured scope."
+commands.deny = ["environment_down"]
