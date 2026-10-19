@@ -1,0 +1,5 @@
+{
+  "boxArt": "box-art.png",
+  "tile300": "tile-300.png",
+  "notesForCertification": "Restricted capabilities. runFullTrust: Isothrum is a full-trust desktop app that runs the user's own Docker and Vagrant command-line tools to build and run network labs on their machine, and tcpdump/Wireshark to capture a lab's traffic. unvirtualizedResources: Isothrum writes a lab's files under its data folder (isoloom.yml, generated Docker Compose files, Vagrantfiles, provisioning scripts, .pcap captures) that those tools, which run outside the package, must read; with file-system write virtualization these files are invisible to them and no lab can run. No registry virtualization behaviour is relied on beyond letting those tools reach the real HKCU. Testing: the editor opens offline with no account; running a lab requires Docker Desktop (container labs) or Vagrant with VirtualBox (VM labs), and capturing traffic uses Wireshark if installed."
+}

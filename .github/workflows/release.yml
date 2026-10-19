@@ -218,3 +218,23 @@ jobs:
         if: always() && matrix.platform == 'macos-latest'
         shell: bash
         run: rm -f "$RUNNER_TEMP/apple_api_key.p8"
+
+  # Windows: the same release to the Microsoft Store (MSIX, signed by the Store at distribution).
+  # Its own reusable-workflow call, so a Store hiccup (a submission still in certification blocks a
+  # new one) never holds back the GitHub draft release. Tag builds only, and only when the Store
+  # product id is configured: when the repository variable STORE_PRODUCT_ID is unset the whole leg
+  # is skipped, so a release without a Store listing is never failed by it.
+  store:
+    needs: release
+    if: github.ref_type == 'tag' && vars.STORE_PRODUCT_ID != ''
+    uses: ./.github/workflows/msix.yml
+    with:
+      tag: ${{ github.ref_name }}
+      # Repo variable STORE_AUTO_SUBMIT=false: leave the Store submission as a draft to review in
+      # Partner Center instead of sending it for certification.
+      commit: ${{ vars.STORE_AUTO_SUBMIT != 'false' }}
+    # Only the Partner Center credentials, not every repo secret.
+    secrets:
+      STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+      STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+      STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}

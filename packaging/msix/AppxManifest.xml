@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for the Microsoft Store build of Isothrum.
+
+  OWNER ACTION: the Identity Name and Publisher below MUST match Partner Center >
+  Product Identity for Isothrum EXACTLY, or the Store rejects the upload. Partner Center
+  shows them once the listing exists (Publisher is a CN=<GUID> assigned to the account).
+  The values here are placeholders until then.
+
+  __VERSION__ is substituted at build time (see .github/workflows/msix.yml); the fourth
+  segment must stay .0 and the version must be higher than the currently published package.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  IgnorableNamespaces="uap rescap desktop6">
+
+  <Identity
+    Name="F4K.Isothrum"
+    Publisher="CN=F4K"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Isothrum</DisplayName>
+    <PublisherDisplayName>F4K</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <!-- Isothrum generates a lab's files on disk (isoloom.yml, generated Docker Compose files,
+         Vagrantfiles, provisioning scripts, .pcap captures) that the lab runtimes (Docker, Vagrant,
+         tcpdump/Wireshark) read when it runs a lab. Left virtualized, those writes land in the
+         package's private copy of AppData and the runtimes, which run outside the package, can't
+         find them. -->
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+    <!-- Likewise for the registry: tool state the lab runtimes write under HKCU must reach the
+         real hive, not the package's private copy, which Windows never reads. -->
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <!-- The languages the app speaks; the Store lists them on the product page. Each has its strings
+       in Strings/<lang>/Resources.resw (indexed into resources.pri at build time). Add a language
+       by adding a Resource here and a Strings/<lang>/Resources.resw file. -->
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="Isothrum" Executable="Isothrum.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Isothrum"
+        Description="ms-resource:AppDescription"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- A full-trust desktop (Win32) app packaged for the Store. -->
+    <rescap:Capability Name="runFullTrust" />
+    <!-- Needed for FileSystemWriteVirtualization and RegistryWriteVirtualization (above). -->
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>
