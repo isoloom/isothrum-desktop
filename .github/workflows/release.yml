@@ -1,0 +1,220 @@
+name: Release
+
+# Builds the Isothrum desktop app for macOS (universal), Windows and Linux and publishes the
+# installers to a GitHub Release. Trigger by pushing a tag like `v1.0.0` (or run manually from the
+# Actions tab). The release is always left as a DRAFT: a human reviews the assets and publishes it
+# (see RELEASE.md). Nothing is published, shipped or auto-updated by this workflow on its own.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  # One release per tag/ref at a time; never cancel one mid-upload.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Least privilege at the top: only the jobs that write to the GitHub Release (prepare, release)
+# raise themselves to contents: write below.
+permissions:
+  contents: read
+
+jobs:
+  # The draft release, made once before the builds so the matrix legs only upload to it (no two
+  # platform jobs racing to create the same release). Uses the workflow's GITHUB_TOKEN.
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./src-tauri/tauri.conf.json").version')
+          tag="${REF_NAME:-v$version}"
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              echo "Release $tag exists."; exit 0
+            fi
+            if gh release create "$tag" --repo "${{ github.repository }}" --draft --target "${{ github.sha }}" \
+                --title "Isothrum v$version" --notes "Download the installer for your platform below."; then
+              exit 0
+            fi
+            echo "Creating $tag failed (attempt $attempt); retrying."
+            sleep $((attempt * 15))
+          done
+          exit 1
+
+  release:
+    needs: prepare
+    # Uploads the built installers to the GitHub Release (tauri-action + the DMG re-upload).
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS universal: one .dmg that runs on both Apple Silicon and Intel.
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          # Linux on ubuntu-22.04: its glibc is the floor the shipped .deb / AppImage target, so the
+          # installers run on older distros. Do not move this to a newer runner.
+          - platform: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+          - platform: windows-latest
+            args: ""
+            rust-targets: ""
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Tauri v2 build prerequisites for Linux (WebKitGTK, AppIndicator, etc.).
+      - if: startsWith(matrix.platform, 'ubuntu')
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            patchelf \
+            build-essential \
+            curl wget file
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Installs @isothrum/editor + @tauri-apps/cli from the lockfile. `tauri build` runs the
+      # config's beforeBuildCommand (`npm run editor`), which needs these present.
+      - run: npm ci
+
+      # Windows Authenticode via Azure Trusted Signing. Tauri runs signCommand on the app binary and
+      # the MSI installer. Skipped (unsigned build) until the AZURE_* secrets exist; an absent cert
+      # never fails the build. SmartScreen warns on install until these are set.
+      - name: Set up Authenticode signing (Windows)
+        if: startsWith(matrix.platform, 'windows') && env.AZURE_CLIENT_ID != ''
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
+        run: |
+          set -euo pipefail
+          cargo install trusted-signing-cli --locked
+          # JavaScript in single quotes: its ${...} are template literals, not shell expansions.
+          # shellcheck disable=SC2016
+          node -e '
+            const fs = require("fs"), p = "src-tauri/tauri.conf.json", c = JSON.parse(fs.readFileSync(p, "utf8"));
+            const e = process.env;
+            c.bundle.windows = { ...c.bundle.windows, signCommand:
+              `trusted-signing-cli -e ${e.AZURE_SIGNING_ENDPOINT} -a ${e.AZURE_SIGNING_ACCOUNT} -c ${e.AZURE_SIGNING_PROFILE} -d Isothrum %1` };
+            fs.writeFileSync(p, JSON.stringify(c, null, 2));
+          '
+
+      # Notarization uses an App Store Connect API key. GitHub secrets can only hold text, so the
+      # .p8 is stored base64-encoded and written to a file here; the path and key id are exported
+      # for the tauri-action step below. macOS only.
+      - name: Prepare notarization API key (macOS)
+        if: matrix.platform == 'macos-latest' && env.APPLE_API_KEY_P8 != ''
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/apple_api_key.p8"
+          echo "APPLE_API_KEY=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple_api_key.p8" >> "$GITHUB_ENV"
+
+      # macOS Developer ID signing cert. Exported only when the cert secret exists (like the
+      # notarization key above), so an absent cert yields an unsigned build rather than a failed
+      # `security import` on an empty value. tauri-action reads these from the job env.
+      - name: Set up macOS code signing
+        if: matrix.platform == 'macos-latest' && env.APPLE_CERTIFICATE != ''
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          {
+            printf 'APPLE_CERTIFICATE<<_EOF_\n%s\n_EOF_\n' "$APPLE_CERTIFICATE"
+            printf 'APPLE_CERTIFICATE_PASSWORD<<_EOF_\n%s\n_EOF_\n' "$APPLE_CERTIFICATE_PASSWORD"
+            printf 'APPLE_SIGNING_IDENTITY<<_EOF_\n%s\n_EOF_\n' "$APPLE_SIGNING_IDENTITY"
+          } >> "$GITHUB_ENV"
+
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater artifact signing (minisign) - produces the signed .sig bundles + latest.json
+          # the installed app's auto-updater verifies against the pubkey in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS code signing: Developer ID Application cert (.p12) imported by tauri-action.
+          # The notarization key and the signing cert come from the GITHUB_ENV set in the steps
+          # above (exported only when their secrets exist), so they are not listed here; an absent
+          # cert simply yields an unsigned build. APPLE_API_ISSUER is harmless when empty (it is
+          # only used alongside the key, which is itself absent then).
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Read by trusted-signing-cli (Windows signCommand); unused elsewhere.
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: "Isothrum v__VERSION__"
+          releaseBody: "Download the installer for your platform below."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # tauri-action notarizes + staples the .app but ships the DMG wrapper un-notarized. Notarize +
+      # staple the DMG itself and replace it on the release so a downloaded DMG opens with no
+      # Gatekeeper warning. macOS + tag builds only, and only when the notarization key is present.
+      - name: Notarize + staple the DMG (macOS)
+        if: matrix.platform == 'macos-latest' && github.ref_type == 'tag' && env.APPLE_API_KEY_PATH != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Tauri names the DMG itself (no odd characters); take the one there is.
+          # shellcheck disable=SC2012
+          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)
+          echo "Notarizing $dmg"
+          xcrun notarytool submit "$dmg" \
+            --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "$dmg"
+          spctl -a -vvv -t open --context context:primary-signature "$dmg"
+          gh release upload "$TAG" "$dmg" --clobber --repo "${{ github.repository }}"
+
+      # The runner is ephemeral, but don't leave the notarization key on disk any longer than needed.
+      - name: Remove the notarization API key (macOS)
+        if: always() && matrix.platform == 'macos-latest'
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/apple_api_key.p8"
