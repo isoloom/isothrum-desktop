@@ -8,6 +8,22 @@ publish = false
 # Its own workspace: GTK/WebKit are needed here only.
 [workspace]
 
+# Release profile pinned to Cargo's fast defaults, kept EXPLICIT on purpose. The app drives
+# VMs/containers and is I/O-bound, so link-time optimization buys it nothing — and a max-LTO release
+# of this ~500-crate graph is exactly the kind of thing that blew the CI budget as the old universal
+# macOS build. Locking `lto = false` here stops a future tauri/template or dependency bump from
+# silently switching LTO back on. `codegen-units = 16` is the default; it is written out so that
+# value is pinned too (raising it was measured to NOT speed the compile up — the build is bound by
+# the dependency graph's critical path and, on CI's few-core runners, by core count, not by
+# intra-crate codegen parallelism). `strip` trims the shipped binary (~24 MB stripped). `incremental`
+# stays off: each CI leg starts from the restored dependency cache, so incremental state would only
+# bloat that cache without ever being reused across runs.
+[profile.release]
+lto = false
+codegen-units = 16
+incremental = false
+strip = true
+
 [lib]
 name = "isothrum_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
