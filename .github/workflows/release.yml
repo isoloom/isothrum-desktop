@@ -1,7 +1,7 @@
 name: Release
 
-# Builds the Isothrum desktop app for macOS (universal), Windows and Linux and publishes the
-# installers to a GitHub Release. Trigger by pushing a tag like `v1.0.0` (or run manually from the
+# Builds the Isothrum desktop app for macOS (Apple Silicon + Intel), Windows and Linux and publishes
+# the installers to a GitHub Release. Trigger by pushing a tag like `v1.0.0` (or run manually from the
 # Actions tab). The release is always left as a DRAFT: a human reviews the assets and publishes it
 # (see RELEASE.md). Nothing is published, shipped or auto-updated by this workflow on its own.
 
@@ -59,10 +59,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS universal: one .dmg that runs on both Apple Silicon and Intel.
+          # macOS per-arch: a .dmg for Apple Silicon and one for Intel. Each arch builds on its own
+          # leg so the compile stays inside the timeout and the cache warms per arch; the universal
+          # build (both arches, cold cache) overran even 150 minutes.
           - platform: macos-latest
-            args: "--target universal-apple-darwin"
-            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            args: "--target aarch64-apple-darwin"
+            rust-targets: "aarch64-apple-darwin"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+            rust-targets: "x86_64-apple-darwin"
           # Linux on ubuntu-22.04: its glibc is the floor the shipped .deb / AppImage target, so the
           # installers run on older distros. Do not move this to a newer runner.
           - platform: ubuntu-22.04
@@ -105,6 +110,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          # Distinct cache per matrix leg: the two macOS arch legs share a runner OS and job name, so
+          # without this they would clobber each other's cache.
+          key: ${{ matrix.args }}
 
       # Installs @isothrum/editor + @tauri-apps/cli from the lockfile. `tauri build` runs the
       # config's beforeBuildCommand (`npm run editor`), which needs these present.
@@ -204,7 +212,7 @@ jobs:
           set -euo pipefail
           # Tauri names the DMG itself (no odd characters); take the one there is.
           # shellcheck disable=SC2012
-          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)
+          dmg=$(ls src-tauri/target/*/release/bundle/dmg/*.dmg | head -1)
           echo "Notarizing $dmg"
           xcrun notarytool submit "$dmg" \
             --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
