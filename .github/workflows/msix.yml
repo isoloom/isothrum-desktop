@@ -9,9 +9,12 @@ name: MSIX (Microsoft Store)
 # - When "submit" is true: also creates + commits a Store submission for the package.
 #
 # Prereqs (the owner sets these up once):
-#   - A Microsoft Store listing for Isothrum exists in Partner Center and has passed certification
-#     at least once MANUALLY. The submission API cannot complete the very first submission on an
-#     incomplete listing; CI only automates the submissions that follow.
+#   - A Microsoft Store app for Isothrum has been reserved in Partner Center (a name/Store ID).
+#     CI can create and fill the very first submission as a reviewable DRAFT (store-submit.ps1 sets
+#     the required listing properties that a first submission has nothing to copy from). Two steps
+#     stay with the owner in Partner Center and are NOT automated: answering the IARC age-rating
+#     questionnaire once (it has no submission-API field), and reviewing + submitting the first
+#     release to the Store. After the first submission is published, CI automates the rest.
 #   - The repository SECRET STORE_PRODUCT_ID holds Isothrum's own Store ID
 #     (Partner Center > Product Identity). It is NOT hardcoded here: when the secret is unset
 #     every submission step no-ops with a clear message instead of failing.

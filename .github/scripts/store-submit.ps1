@@ -10,9 +10,13 @@
 # committed) update the package + text and leave the images managed by hand in Partner Center. Once
 # the files are added under packaging/store/images|trailers/, they flow automatically.
 #
-# NOTE: the very FIRST submission for a product must be created and completed MANUALLY in Partner
-# Center — the API cannot complete the first submission on an incomplete listing. This script
-# automates every submission after that.
+# NOTE: this script can CREATE and fill the very first submission as a reviewable DRAFT (it sets the
+# required listing properties — applicationCategory, pricing, visibility, device families — that a
+# first submission has no prior submission to copy them from, so they would otherwise arrive as
+# 'NotSet' and the API would reject the update). It still cannot COMPLETE the first submission: the
+# IARC age-rating questionnaire has no field in the submission API and must be answered once in
+# Partner Center, and the first release-to-Store must be reviewed and submitted there by a person.
+# So on a first run leave -Commit $false, finish the age rating in Partner Center, then submit it.
 #
 # Env: STORE_TENANT_ID, STORE_CLIENT_ID, STORE_CLIENT_SECRET, STORE_PRODUCT_ID.
 # API reference: https://learn.microsoft.com/windows/uwp/monetize/manage-app-submissions
@@ -56,9 +60,49 @@ $sub = Invoke-Store Post "$api/submissions"
 $id = $sub.id
 Write-Host "Submission $id"
 
-# Package: the new bundle replaces every package of the copied submission.
+# Required submission properties the API cannot default on a FIRST submission.
+# A new submission is a COPY of the last published one, so these fields normally carry over. The
+# very first submission has nothing to copy, so each enum below arrives as "NotSet" and the update
+# is rejected ("InvalidParameterValue: 'NotSet' is not a valid value…"). Give each a valid value,
+# but ONLY when it is unset/NotSet, so later submissions keep whatever the published listing had
+# (idempotent — this block is a no-op once a real submission exists to copy from).
+function Test-Unset($v) {
+  return ($null -eq $v) -or (($v -is [string]) -and ([string]::IsNullOrWhiteSpace($v) -or $v -eq "NotSet"))
+}
+
+# Category: Isothrum builds and runs network labs on the developer's machine → "Developer tools".
+if (Test-Unset $sub.applicationCategory) { $sub.applicationCategory = "DeveloperTools" }
+
+# Pricing: Free, no trial, every market (an empty marketSpecificPricings leaves the base Free price
+# in all markets). isAdvancedPricingModel is read-only — drop it so it is never sent back.
+if (-not $sub.pricing) { $sub.pricing = @{} }
+if (Test-Unset $sub.pricing.priceId) { $sub.pricing.priceId = "Free" }
+if (Test-Unset $sub.pricing.trialPeriod) { $sub.pricing.trialPeriod = "NoFreeTrial" }
+if ($null -eq $sub.pricing.marketSpecificPricings) { $sub.pricing.marketSpecificPricings = @{} }
+if ($null -eq $sub.pricing.sales) { $sub.pricing.sales = @() }
+if ($sub.pricing.ContainsKey("isAdvancedPricingModel")) { $sub.pricing.Remove("isAdvancedPricingModel") | Out-Null }
+
+# Listed publicly once it ships; released by hand after certification (never auto-published).
+if (Test-Unset $sub.visibility) { $sub.visibility = "Public" }
+if (Test-Unset $sub.targetPublishMode) { $sub.targetPublishMode = "Manual" }
+
+# Organizational licensing: offer through Store-managed (online) licensing (the Partner Center default).
+if (Test-Unset $sub.enterpriseLicensing) { $sub.enterpriseLicensing = "Online" }
+
+# Device families: Isothrum is a full-trust Win32 desktop app. Target Desktop, and let Microsoft
+# decide about any future device families.
+if ($null -eq $sub.allowMicrosoftDecideAppAvailabilityToFutureDeviceFamilies) {
+  $sub.allowMicrosoftDecideAppAvailabilityToFutureDeviceFamilies = $true
+}
+if (-not $sub.allowTargetFutureDeviceFamilies) {
+  $sub.allowTargetFutureDeviceFamilies = @{ Desktop = $true; Mobile = $false; Holographic = $false; Xbox = $false; Team = $false }
+}
+
+# Package: the new bundle replaces every package of the copied submission. minimumDirectXVersion /
+# minimumSystemRam are required on update (ignored for MSIX, but must be present); "None" is the
+# documented no-op value.
 foreach ($p in $sub.applicationPackages) { $p.fileStatus = "PendingDelete" }
-$sub.applicationPackages += @{ fileName = (Add-File $Package "Isothrum.msixbundle"); fileStatus = "PendingUpload" }
+$sub.applicationPackages += @{ fileName = (Add-File $Package "Isothrum.msixbundle"); fileStatus = "PendingUpload"; minimumDirectXVersion = "None"; minimumSystemRam = "None" }
 
 # Image types this script owns; any other image (set by hand in Partner Center) is left as is.
 $managed = @("Screenshot", "StoreLogo9x16", "StoreLogoSquare", "Icon")
