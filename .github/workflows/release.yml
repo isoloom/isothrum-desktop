@@ -228,12 +228,13 @@ jobs:
 
   # Windows: the same release to the Microsoft Store (MSIX, signed by the Store at distribution).
   # Its own reusable-workflow call, so a Store hiccup (a submission still in certification blocks a
-  # new one) never holds back the GitHub draft release. Tag builds only, and only when the Store
-  # product id is configured: when the repository variable STORE_PRODUCT_ID is unset the whole leg
-  # is skipped, so a release without a Store listing is never failed by it.
+  # new one) never holds back the GitHub draft release. Tag builds only. STORE_PRODUCT_ID is a
+  # secret, and a job-level `if:` cannot read secrets, so the leg isn't gated on it here; instead the
+  # submit step inside msix.yml no-ops with a clear message when the secret is unset, so a release
+  # without a Store listing is never failed by it.
   store:
     needs: release
-    if: github.ref_type == 'tag' && vars.STORE_PRODUCT_ID != ''
+    if: github.ref_type == 'tag'
     uses: ./.github/workflows/msix.yml
     with:
       tag: ${{ github.ref_name }}
@@ -245,3 +246,4 @@ jobs:
       STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
       STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
       STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
+      STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}

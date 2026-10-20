@@ -12,8 +12,8 @@ name: MSIX (Microsoft Store)
 #   - A Microsoft Store listing for Isothrum exists in Partner Center and has passed certification
 #     at least once MANUALLY. The submission API cannot complete the very first submission on an
 #     incomplete listing; CI only automates the submissions that follow.
-#   - The repository VARIABLE STORE_PRODUCT_ID holds Isothrum's own Store ID
-#     (Partner Center > Product Identity). It is NOT hardcoded here: when the variable is unset
+#   - The repository SECRET STORE_PRODUCT_ID holds Isothrum's own Store ID
+#     (Partner Center > Product Identity). It is NOT hardcoded here: when the secret is unset
 #     every submission step no-ops with a clear message instead of failing.
 #   - packaging/msix/AppxManifest.xml carries the real Identity (Name + Publisher) from
 #     Partner Center > Product Identity for Isothrum.
@@ -59,13 +59,17 @@ on:
         type: boolean
         default: true
     secrets:
-      # Partner Center (Store submission API) Entra app credentials; nothing else is needed.
+      # Partner Center (Store submission API) Entra app credentials.
       STORE_TENANT_ID:
         required: true
       STORE_CLIENT_ID:
         required: true
       STORE_CLIENT_SECRET:
         required: true
+      # Isothrum's Store ID (Partner Center > Product Identity), kept as a secret at the owner's
+      # request. Optional: when it is unset the submit step no-ops instead of failing.
+      STORE_PRODUCT_ID:
+        required: false
 
 permissions:
   contents: read
@@ -257,8 +261,8 @@ jobs:
       cancel-in-progress: false
     timeout-minutes: 350
     env:
-      # The only place the Store product id is read: the repository variable, never hardcoded.
-      STORE_PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+      # The only place the Store product id is read: the repository secret, never hardcoded.
+      STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
     steps:
       # The Store takes one submission at a time: a new one is refused while the last is still in
       # certification. Ask Partner Center first, and wait (up to ~5.5 h) while one is going
@@ -273,7 +277,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           if ([string]::IsNullOrWhiteSpace($env:STORE_PRODUCT_ID)) {
-            Write-Host "::warning::STORE_PRODUCT_ID repository variable is not set; skipping the Microsoft Store submission. Set it to Isothrum's Store ID (Partner Center > Product Identity) to enable it."
+            Write-Host "::warning::STORE_PRODUCT_ID repository secret is not set; skipping the Microsoft Store submission. Set it to Isothrum's Store ID (Partner Center > Product Identity) to enable it."
             "skip=true" >> $env:GITHUB_ENV
             exit 0
           }
@@ -338,7 +342,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      STORE_PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+      STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
     steps:
       - shell: pwsh
         env:
@@ -348,7 +352,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           if ([string]::IsNullOrWhiteSpace($env:STORE_PRODUCT_ID)) {
-            Write-Host "::warning::STORE_PRODUCT_ID repository variable is not set; nothing to do."
+            Write-Host "::warning::STORE_PRODUCT_ID repository secret is not set; nothing to do."
             exit 0
           }
           $api = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:STORE_PRODUCT_ID"
@@ -381,7 +385,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      STORE_PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+      STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
     steps:
       - shell: pwsh
         env:
@@ -391,7 +395,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           if ([string]::IsNullOrWhiteSpace($env:STORE_PRODUCT_ID)) {
-            Write-Host "::warning::STORE_PRODUCT_ID repository variable is not set; nothing to do."
+            Write-Host "::warning::STORE_PRODUCT_ID repository secret is not set; nothing to do."
             exit 0
           }
           $api = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:STORE_PRODUCT_ID"
