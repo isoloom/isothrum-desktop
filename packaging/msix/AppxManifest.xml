@@ -2,10 +2,9 @@
 <!--
   MSIX manifest for the Microsoft Store build of Isothrum.
 
-  OWNER ACTION: the Identity Name and Publisher below MUST match Partner Center >
-  Product Identity for Isothrum EXACTLY, or the Store rejects the upload. Partner Center
-  shows them once the listing exists (Publisher is a CN=<GUID> assigned to the account).
-  The values here are placeholders until then.
+  The Identity Name and Publisher below match Partner Center > Product Identity for Isothrum
+  (Store ID 9N6KX8WSST19); they MUST stay in sync with it or the Store rejects the upload.
+  Publisher is the CN=<GUID> assigned to the account; PublisherDisplayName is "Cyber Courses".
 
   __VERSION__ is substituted at build time (see .github/workflows/msix.yml); the fourth
   segment must stay .0 and the version must be higher than the currently published package.
@@ -18,14 +17,14 @@
   IgnorableNamespaces="uap rescap desktop6">
 
   <Identity
-    Name="F4K.Isothrum"
-    Publisher="CN=F4K"
+    Name="CyberCourses.Isothrum"
+    Publisher="CN=41CF815D-D9DB-4E28-9EF3-76014D5F8FCA"
     Version="__VERSION__"
     ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>Isothrum</DisplayName>
-    <PublisherDisplayName>F4K</PublisherDisplayName>
+    <PublisherDisplayName>Cyber Courses</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <!-- Isothrum generates a lab's files on disk (isoloom.yml, generated Docker Compose files,
          Vagrantfiles, provisioning scripts, .pcap captures) that the lab runtimes (Docker, Vagrant,
