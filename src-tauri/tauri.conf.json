@@ -24,7 +24,9 @@
       "msi"
     ],
     "category": "DeveloperTool",
+    "publisher": "Cyber Courses",
     "shortDescription": "Draw network labs, run them, capture their traffic.",
+    "longDescription": "Isothrum runs the network labs you design in Isoloom: it brings the machines up, wires their networks, runs the checks and captures their traffic, all from your desktop.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,7 +40,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGRTBGMzJEOTQxMjkyNTMKUldSVGtoS1VMZlBnLzN1RnFmTXFzNStOaUxIRmh3b1hZSC84dW1TVStoZjNwUGtPd2NVbU8wQlUK",
       "endpoints": [
-        "https://github.com/isoloom/isothrum/releases/latest/download/latest.json"
+        "https://github.com/isoloom/isothrum-desktop/releases/latest/download/latest.json"
       ]
     }
   }
