@@ -98,21 +98,30 @@ jobs:
             build-essential \
             curl wget file
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to the stable branch's commit (not the moving `@stable` ref); `toolchain: stable`
+      # names the channel explicitly, since a SHA no longer carries it in the ref.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           targets: ${{ matrix.rust-targets }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          # The whole src-tauri workspace, so the restored target dir covers the heavy
+          # isoloom/isothrum crate graph (they compile into src-tauri/target), not just this crate.
           workspaces: src-tauri
           # Distinct cache per matrix leg: the two macOS arch legs share a runner OS and job name, so
           # without this they would clobber each other's cache.
           key: ${{ matrix.args }}
+          # Still save the warmed dependency cache when a leg fails after compiling (e.g. a flaky
+          # notarize or upload, or a timeout-adjacent error): the next run restores it instead of
+          # recompiling ~500 crates from cold — the difference between a ~5 min and a ~90 min leg.
+          cache-on-failure: true
 
       # Installs @isothrum/editor + @tauri-apps/cli from the lockfile. `tauri build` runs the
       # config's beforeBuildCommand (`npm run editor`), which needs these present.
